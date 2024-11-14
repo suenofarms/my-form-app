@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sueño Farms Production Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            margin: auto;
+        }
+
+        label, select, input {
+            display: block;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
+        input[type="submit"] {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">Sueño Farms Production Tracker</h1>
+    <form action="/submit" method="post">
+        <!-- Employee Dropdown -->
+        <label for="employee">Choose an Employee:</label>
+        <select name="selectedEmployee" id="employee" required>
+            <option value="" disabled selected>Please select an Employee</option>
+            <% if (employees && employees.length > 0) { %>
+                <% employees.forEach(function(employee) { %>
+                    <option value="<%= employee.initial %>"><%= employee.initial %></option>
+                <% }); %>
+            <% } else { %>
+                <option disabled>No employees available</option>
+            <% } %>
+        </select><br><br>
+
+        <!-- Row Dropdown -->
+        <label for="row">Choose a Row:</label>
+        <select name="selectedRow" id="row" required>
+            <option value="" disabled selected>Please select a Row</option>
+            <% if (rows && rows.length > 0) { %>
+                <% rows.forEach(function(row) { %>
+                    <option value="<%= row.Row %>"><%= row.Row %></option>
+                <% }); %>
+            <% } else { %>
+                <option disabled>No rows available</option>
+            <% } %>
+        </select><br><br>
+
+        <!-- Plant Dropdown -->
+        <label for="plant">Choose a Plant:</label>
+        <select name="selectedPlant" id="plant" required>
+            <option value="" disabled selected>Please select a Plant</option>
+            <% if (plants && plants.length > 0) { %>
+                <% plants.forEach(function(plant) { %>
+                    <option value="<%= plant["Plant Name"] %>"><%= plant["Plant Name"] %></option>
+                <% }); %>
+            <% } else { %>
+                <option disabled>No plants available</option>
+            <% } %>
+        </select><br><br>
+
+        <!-- PP Dropdown -->
+        <label for="pp">Choose PP:</label>
+        <select name="PP" id="pp" required>
+            <option value="" disabled selected>Please select PP</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+        </select><br><br>
+
+        <!-- TrayType Dropdown -->
+        <label for="trayType">Choose Tray Type:</label>
+        <select name="TrayType" id="trayType" required>
+            <option value="" disabled selected>Please select a Tray Type</option>
+            <option value="15">15</option>
+            <option value="18">18</option>
+            <option value="38">38</option>
+            <option value="50">50</option>
+            <option value="72">72</option>
+            <option value="102">102</option>
+        </select><br><br>
+
+        <!-- TrayCount Input -->
+        <label for="trayCount">Enter Tray Count:</label>
+        <input type="number" name="TrayCount" id="trayCount" min="1" required><br><br>
+
+        <input type="submit" value="Submit">
+    </form>
+</body>
+</html>
