@@ -1,81 +1,41 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
-const mqtt = require('mqtt');  // Import MQTT
+const mqtt = require('mqtt');
+const { updateAggregatedBatch } = require('./aggregatedBatch'); // Ensure correct path
 
-// Set up express app
+// Initialize Express App
 const app = express();
 const port = 3000;
 
-// MongoDB Atlas connection string (connecting to the entire cluster)
+// MongoDB Atlas Connection
 const mongoDB = 'mongodb+srv://SuenoFarms:bestliners@cluster0.imrxbn0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
-// Connect to MongoDB (without specifying a particular database)
 mongoose.connect(mongoDB, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('MongoDB connected successfully to the cluster'))
+  .then(() => console.log('MongoDB connected successfully'))
   .catch((err) => {
     console.error('MongoDB connection error:', err);
-    process.exit(1);  // Stop the server if connection fails
+    process.exit(1);
   });
 
-// MQTT Client Setup - matching Arduino settings
-const mqttOptions = {
-  clientId: 'Device0100',  // New unique client ID (different from Arduino)
-  username: 'hivemq.webclient.1683677052040',  // Match Arduino credentials
-  password: 'n5i2hAaN<?6wsG;4%JHD',  // Match Arduino credentials
+// MQTT Client Setup
+const mqttClient = mqtt.connect('mqtts://30db3a99bc17487cb46a9f773f171638.s2.eu.hivemq.cloud:8883', {
+  clientId: 'Device0100',
+  username: 'hivemq.webclient.1683677052040',
+  password: 'n5i2hAaN<?6wsG;4%JHD',
   clean: true,
-  connectTimeout: 4000,
-  reconnectPeriod: 1000,
-};
-const mqttClient = mqtt.connect('mqtts://30db3a99bc17487cb46a9f773f171638.s2.eu.hivemq.cloud:8883', mqttOptions);
-
-// MQTT Connection Handling
-mqttClient.on('connect', () => {
-  console.log('Connected to MQTT broker successfully');
 });
 
-mqttClient.on('error', (err) => {
-  console.error('Error connecting to MQTT broker:', err);
-});
-
-mqttClient.on('offline', () => {
-  console.error('MQTT client is offline.');
-});
-
-mqttClient.on('reconnect', () => {
-  console.log('MQTT client is attempting to reconnect...');
-});
-
-mqttClient.on('close', () => {
-  console.log('MQTT connection closed.');
-});
+mqttClient.on('connect', () => console.log('Connected to MQTT broker'));
+mqttClient.on('error', (err) => console.error('MQTT connection error:', err));
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
-app.set('view engine', 'ejs');  // Set EJS as the templating engine
+app.set('view engine', 'ejs');
+app.set('views', __dirname + '/views');
 
-// Schemas and Models for collections from different databases:
-
-// Schema for Plant List (from Plant_List database)
-const plantListSchema = new mongoose.Schema({
-  "Plant Name": String
-});
-const PlantList = mongoose.connection.useDb('Plant_List').model('PlantList', plantListSchema, 'Plant_List');
-
-// Schema for Employees (from Employees database)
-const employeeSchema = new mongoose.Schema({
-  "initial": String
-});
-const Employee = mongoose.connection.useDb('Employees').model('Employee', employeeSchema, 'Employees');
-
-// Schema for Rows (from Benches database)
-const rowSchema = new mongoose.Schema({
-  "Row": String
-});
-const Row = mongoose.connection.useDb('Benches').model('Row', rowSchema, 'Rows');
-
-// Schema for Form Data (saving form submissions in myDatabase)
+// Schemas and Models
 const formSchema = new mongoose.Schema({
   employee: String,
   row: String,
@@ -83,80 +43,114 @@ const formSchema = new mongoose.Schema({
   PP: Number,
   trayType: Number,
   trayCount: Number,
-  date: { type: Date, default: Date.now }
+  stickWeekYear: String,
+  finishWeekYear: String,
+  batchNumber: String,
+  finishDate: String,
+  date: { type: Date, default: Date.now },
 });
 const FormData = mongoose.connection.useDb('myDatabase').model('FormData', formSchema, 'forms');
 
-// Serve the HTML form with dynamic dropdowns for Plant List, Employees, and Rows
+const plantListSchema = new mongoose.Schema({ "Plant Name": String });
+const PlantList = mongoose.connection.useDb('Plant_List').model('PlantList', plantListSchema, 'Plant_List');
+
+const employeeSchema = new mongoose.Schema({ initial: String });
+const Employee = mongoose.connection.useDb('Employees').model('Employee', employeeSchema, 'Employees');
+
+const rowSchema = new mongoose.Schema({ Row: String });
+const Row = mongoose.connection.useDb('Benches').model('Row', rowSchema, 'Rows');
+
+// Helper Function for ISO Week Calculation
+function getISOWeek(date) {
+  const tempDate = new Date(date.getTime());
+  tempDate.setHours(0, 0, 0, 0);
+  tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+  const firstThursday = new Date(tempDate.getFullYear(), 0, 4);
+  return Math.ceil(((tempDate.getTime() - firstThursday.getTime()) / 86400000 + 1) / 7);
+}
+
+// Route to Serve Form
 app.get('/', async (req, res) => {
   try {
-    // Fetch the data for dropdowns
     const plants = await PlantList.find({}, { "Plant Name": 1, _id: 0 });
-    const employees = await Employee.find({}, { "initial": 1, _id: 0 });
-    const rows = await Row.find({}, { "Row": 1, _id: 0 });
+    const employees = await Employee.find({}, { initial: 1, _id: 0 });
+    const rows = await Row.find({}, { Row: 1, _id: 0 });
 
-    // Log the fetched data
-    console.log("Plants fetched:", plants);
-    console.log("Employees fetched:", employees);
-    console.log("Rows fetched:", rows);
-
-    // Pass plant, employee, and row data to the EJS template
     res.render('index', { plants, employees, rows });
   } catch (err) {
-    console.error('Error fetching data:', err);
-    res.status(500).send('Error fetching data');
+    console.error('Error loading form:', err);
+    res.status(500).send('Error loading form data');
   }
 });
 
-// Route to handle form submission and save data to MongoDB
+// Route for Form Submission
 app.post('/submit', async (req, res) => {
-  const { selectedEmployee, selectedRow, selectedPlant, PP, TrayType, TrayCount } = req.body;
-
-  console.log('Received form data:', req.body);  // Log form data for debugging
-
-  // Create a new FormData document with the submitted data
-  const newFormData = new FormData({
-    employee: selectedEmployee,
-    row: selectedRow,
-    plant: selectedPlant,
-    PP: parseInt(PP, 10),
-    trayType: parseInt(TrayType, 10),
-    trayCount: parseInt(TrayCount, 10)
-  });
-
   try {
-    // Save the form data into the forms collection in the myDatabase database
-    await newFormData.save();
-    console.log('Form data saved successfully to MongoDB');
+    const { selectedEmployee, selectedRow, selectedPlant, PP, TrayType, TrayCount } = req.body;
 
-    // Publish an MQTT message after successful form submission
-    const message = JSON.stringify({
+    // Data Validation
+    if (!selectedPlant || !TrayCount) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    const currentDate = new Date();
+    const stickWeekYear = `${getISOWeek(currentDate)}${currentDate.getFullYear()}`;
+    const finishDate = new Date(currentDate);
+    finishDate.setDate(currentDate.getDate() + 6 * 7); // Default to 6 weeks
+    const finishWeekYear = `${getISOWeek(finishDate)}${finishDate.getFullYear()}`;
+    const batchNumber = `${selectedPlant.replace(/\s+/g, '_')}_${TrayType}_${PP}_${finishWeekYear}_${selectedRow}`;
+
+    // Save Form Data
+    const newFormData = new FormData({
       employee: selectedEmployee,
       row: selectedRow,
       plant: selectedPlant,
-      PP: PP,
+      PP: parseInt(PP, 10),
+      trayType: parseInt(TrayType, 10),
+      trayCount: parseInt(TrayCount, 10),
+      stickWeekYear,
+      finishWeekYear,
+      batchNumber,
+      finishDate: finishDate.toISOString().split('T')[0],
+    });
+
+    await newFormData.save();
+
+    // Update Aggregated Batch
+    await updateAggregatedBatch(
+      batchNumber,
+      parseInt(TrayCount, 10),
+      selectedRow,
+      'update',
+      'Batch Created',
+      'Unrooted'
+    );
+    
+    
+
+    // Publish to MQTT
+    const mqttMessage = JSON.stringify({
+      employee: selectedEmployee,
+      row: selectedRow,
+      plant: selectedPlant,
+      PP,
       trayType: TrayType,
       trayCount: TrayCount,
-      timestamp: new Date().toISOString()
+      stickWeekYear,
+      finishWeekYear,
+      batchNumber,
+      finishDate: finishDate.toISOString(),
     });
 
-    const topic = 'suenofarms/production/updates';
-    mqttClient.publish(topic, message, { qos: 1 }, (err) => {
-      if (err) {
-        console.error('Failed to publish MQTT message:', err);
-      } else {
-        console.log(`MQTT message published to topic "${topic}":`, message);
-      }
-    });
+    mqttClient.publish('suenofarms/production/updates', mqttMessage, { qos: 1 });
 
-    res.send(`Form submitted successfully! Employee: ${selectedEmployee}, Row: ${selectedRow}, Plant: ${selectedPlant}, PP: ${PP}, Tray Type: ${TrayType}, Tray Count: ${TrayCount}`);
+    // Send Success Response
+    res.json({ success: true, batchNumber });
   } catch (err) {
-    console.error('Error saving form data:', err);
-    res.status(500).send('Error saving form data');
+    console.error('Error processing submission:', err);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 });
 
-// Start the server
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-});
+// Start the Server
+app.listen(port, () => console.log(`Server running at http://localhost:${port}`));

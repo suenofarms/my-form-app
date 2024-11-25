@@ -24,7 +24,7 @@
             width: 100%;
         }
 
-        input[type="submit"] {
+        input[type="submit"], button {
             background-color: #4CAF50;
             color: white;
             padding: 10px;
@@ -33,81 +33,137 @@
             cursor: pointer;
         }
 
-        input[type="submit"]:hover {
+        input[type="submit"]:hover, button:hover {
             background-color: #45a049;
+        }
+
+        .success-message, .error-message {
+            text-align: center;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .success-message h1, .error-message h1 {
+            color: #4CAF50;
+        }
+
+        .error-message h1 {
+            color: red;
         }
     </style>
 </head>
 <body>
     <h1 style="text-align: center;">Sueño Farms Production Tracker</h1>
-    <form action="/submit" method="post">
-        <!-- Employee Dropdown -->
+
+    <!-- Form Section -->
+    <form id="productionForm" action="/submit" method="POST">
         <label for="employee">Choose an Employee:</label>
         <select name="selectedEmployee" id="employee" required>
-            <option value="" disabled selected>Please select an Employee</option>
-            <% if (employees && employees.length > 0) { %>
-                <% employees.forEach(function(employee) { %>
-                    <option value="<%= employee.initial %>"><%= employee.initial %></option>
-                <% }); %>
-            <% } else { %>
-                <option disabled>No employees available</option>
-            <% } %>
-        </select><br><br>
+            <option value="" disabled selected>Select Employee</option>
+            <% employees.forEach(employee => { %>
+                <option value="<%= employee.initial %>"><%= employee.initial %></option>
+            <% }); %>
+        </select>
 
-        <!-- Row Dropdown -->
         <label for="row">Choose a Row:</label>
         <select name="selectedRow" id="row" required>
-            <option value="" disabled selected>Please select a Row</option>
-            <% if (rows && rows.length > 0) { %>
-                <% rows.forEach(function(row) { %>
-                    <option value="<%= row.Row %>"><%= row.Row %></option>
-                <% }); %>
-            <% } else { %>
-                <option disabled>No rows available</option>
-            <% } %>
-        </select><br><br>
+            <option value="" disabled selected>Select Row</option>
+            <% rows.forEach(row => { %>
+                <option value="<%= row.Row %>"><%= row.Row %></option>
+            <% }); %>
+        </select>
 
-        <!-- Plant Dropdown -->
         <label for="plant">Choose a Plant:</label>
         <select name="selectedPlant" id="plant" required>
-            <option value="" disabled selected>Please select a Plant</option>
-            <% if (plants && plants.length > 0) { %>
-                <% plants.forEach(function(plant) { %>
-                    <option value="<%= plant["Plant Name"] %>"><%= plant["Plant Name"] %></option>
-                <% }); %>
-            <% } else { %>
-                <option disabled>No plants available</option>
-            <% } %>
-        </select><br><br>
+            <option value="" disabled selected>Select Plant</option>
+            <% plants.forEach(plant => { %>
+                <option value="<%= plant["Plant Name"] %>"><%= plant["Plant Name"] %></option>
+            <% }); %>
+        </select>
 
-        <!-- PP Dropdown -->
         <label for="pp">Choose PP:</label>
         <select name="PP" id="pp" required>
-            <option value="" disabled selected>Please select PP</option>
             <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
             <option value="4">4</option>
             <option value="5">5</option>
-        </select><br><br>
+        </select>
 
-        <!-- TrayType Dropdown -->
         <label for="trayType">Choose Tray Type:</label>
         <select name="TrayType" id="trayType" required>
-            <option value="" disabled selected>Please select a Tray Type</option>
             <option value="15">15</option>
             <option value="18">18</option>
             <option value="38">38</option>
             <option value="50">50</option>
             <option value="72">72</option>
             <option value="102">102</option>
-        </select><br><br>
+        </select>
 
-        <!-- TrayCount Input -->
         <label for="trayCount">Enter Tray Count:</label>
-        <input type="number" name="TrayCount" id="trayCount" min="1" required><br><br>
+        <input type="number" name="TrayCount" min="1" required>
 
         <input type="submit" value="Submit">
     </form>
+
+    <!-- Success Message Section -->
+    <div class="success-message" id="successMessage">
+        <h1>Submission Successful!</h1>
+        <p>Batch Number: <span id="batchNumber"></span></p>
+        <p>Your batch has been recorded. Would you like to submit another?</p>
+        <button onclick="resetForm()">Submit Another Entry</button>
+    </div>
+
+    <!-- Error Message Section -->
+    <div class="error-message" id="errorMessage">
+        <h1>Submission Failed!</h1>
+        <p>An error occurred. Please try again.</p>
+        <button onclick="resetForm()">Go Back</button>
+    </div>
+
+    <script>
+        const form = document.getElementById('productionForm');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent form from refreshing the page
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch('/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams(formData),
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const data = await response.json();
+                if (data.success) {
+                    form.style.display = 'none'; // Hide form
+                    successMessage.style.display = 'block'; // Show success message
+                    document.getElementById('batchNumber').textContent = data.batchNumber; // Display batch number
+                } else {
+                    throw new Error(data.message || 'Unknown error occurred.');
+                }
+            } catch (err) {
+                console.error('Submission error:', err.message);
+                form.style.display = 'none'; // Hide form
+                errorMessage.style.display = 'block'; // Show error message
+            }
+        });
+
+        function resetForm() {
+            successMessage.style.display = 'none'; // Hide success message
+            errorMessage.style.display = 'none'; // Hide error message
+            form.reset(); // Clear form
+            form.style.display = 'block'; // Show form
+        }
+    </script>
 </body>
 </html>
