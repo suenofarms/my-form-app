@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const mqtt = require('mqtt');
-const { updateAggregatedBatch } = require('./aggregatedBatch'); // Ensure correct path
+const { aggregatedBatch } = require('./aggregatedBatch'); // Ensure correct path
 
 // Initialize Express App
 const app = express();
@@ -117,15 +117,20 @@ app.post('/submit', async (req, res) => {
     await newFormData.save();
 
     // Update Aggregated Batch
-    await updateAggregatedBatch(
+    await aggregatedBatch(
       batchNumber,
       parseInt(TrayCount, 10),
       selectedRow,
       'update',
       'Batch Created',
-      'Unrooted'
+      'Unrooted',
+      selectedEmployee,
+      selectedPlant,
+      currentDate, // Stick date
+      finishDate, // Finish date
+      stickWeekYear,
+      finishWeekYear
     );
-    
     
 
     // Publish to MQTT

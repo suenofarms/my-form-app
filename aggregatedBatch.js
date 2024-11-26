@@ -2,21 +2,27 @@ const mongoose = require('mongoose');
 
 // Updated Schema for Aggregated Batches
 const aggregatedBatchSchema = new mongoose.Schema({
-  batchNumber: { type: String, required: true },
-  totalTrayCount: { type: Number, required: true },
-  currentRow: { type: String, required: true },
+  batchNumber: { type: String, required: true }, // Unique identifier for the batch
+  plantName: { type: String, required: true }, // Name of the plant
+  totalTrayCount: { type: Number, required: true }, // Total number of trays in the batch
+  currentRow: { type: String, required: true }, // Current row where the batch is located
   rootingProgress: {
     type: String,
     enum: ['Unrooted', 'Callus', 'Root Emergence', 'Rooted', 'Fully Rooted'],
     default: 'Unrooted', // Default state when batch is created
   },
   photos: [String], // Array of photo file URLs
+  stickDate: { type: Date, required: true }, // Date when the trays were stuck
+  finishDate: { type: Date, required: true }, // Estimated finish date
+  stickWeekYear: { type: String, required: true }, // Stick week-year (e.g., "482024")
+  finishWeekYear: { type: String, required: true }, // Finish week-year (e.g., "522024")
   logs: [
     {
-      type: { type: String, required: true }, // e.g., 'update', 'sale', 'movement'
-      details: { type: String, required: true }, // Specifics of the log
+      type: { type: String, required: true }, // e.g., 'update', 'movement', 'mortality'
+      details: { type: String, required: true }, // Specifics of the log entry
       count: { type: Number, required: true }, // Number of trays affected
-      timestamp: { type: Date, default: Date.now },
+      timestamp: { type: Date, default: Date.now }, // Timestamp of the log entry
+      employee: { type: String, default: 'Unknown' }, // Employee who performed the action
     },
   ],
   status: { type: String, default: 'active' }, // 'active', 'depleted'
@@ -27,14 +33,20 @@ const AggregatedBatch = mongoose
   .useDb('myDatabase')
   .model('AggregatedBatch', aggregatedBatchSchema, 'aggregatedBatches');
 
-// Function to update aggregated batch
-async function updateAggregatedBatch(
+// Function to update or create an aggregated batch
+async function aggregatedBatch(
   batchNumber,
   trayCount,
   currentRow,
   logType,
-  logDetails = 'No details provided',
-  rootingProgress = null // Optional rootingProgress update
+  logDetails,
+  rootingProgress,
+  employee,
+  plantName,
+  stickDate,
+  finishDate,
+  stickWeekYear,
+  finishWeekYear
 ) {
   try {
     const logEntry = {
@@ -42,26 +54,32 @@ async function updateAggregatedBatch(
       details: logDetails,
       count: trayCount,
       timestamp: new Date(),
+      employee: employee || 'Unknown', // Fallback if no employee is provided
     };
 
     const existingBatch = await AggregatedBatch.findOne({ batchNumber });
 
     if (existingBatch) {
-      // Update fields
-      existingBatch.totalTrayCount += trayCount;
-      existingBatch.currentRow = currentRow;
+      // Update existing batch
+      existingBatch.totalTrayCount += trayCount; // Increment tray count
+      existingBatch.currentRow = currentRow; // Update current row
       if (rootingProgress) {
         existingBatch.rootingProgress = rootingProgress; // Update rooting progress if provided
       }
-      existingBatch.logs.push(logEntry);
-      await existingBatch.save();
+      existingBatch.logs.push(logEntry); // Add log entry
+      await existingBatch.save(); // Save changes
     } else {
       // Create a new batch if it doesn't exist
       const newBatch = new AggregatedBatch({
         batchNumber,
+        plantName,
         totalTrayCount: trayCount,
         currentRow,
-        rootingProgress: rootingProgress || 'Unrooted', // Default to 'Unrooted'
+        rootingProgress: rootingProgress || 'Unrooted',
+        stickDate,
+        finishDate,
+        stickWeekYear,
+        finishWeekYear,
         photos: [],
         logs: [logEntry],
         status: 'active',
@@ -74,4 +92,4 @@ async function updateAggregatedBatch(
   }
 }
 
-module.exports = { updateAggregatedBatch };
+module.exports = { aggregatedBatch };
